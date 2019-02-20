@@ -3,6 +3,8 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from os.path import basename
+from email import encoders
+from email.mime.base import MIMEBase
 
 
 def send_from_gmail(send_to, subject, text, html=None, files=None):
@@ -26,17 +28,23 @@ def send_from_gmail(send_to, subject, text, html=None, files=None):
         msg.attach(MIMEText(text))
     msg['From'] = 'esa.rss.team@gmail.com'
     msg['Subject'] = subject
-
-    for f in files or []:
-        with open(f, "rb") as fil:
-            msg.attach(MIMEApplication(
-                fil.read(),
-                Content_Disposition='attachment; filename="%s"' % basename(f),
-                Name=basename(f)
-            ))
+    for f in list(files):# or []:
+        # with open(f, "rb") as fil:
+        #     msg.attach(MIMEApplication(
+        #         fil.read(),
+        #         Content_Disposition='attachment; filename="%s"' % basename(f),
+        #         Name=basename(f)
+        #     ))
+        part = MIMEBase('application', "octet-stream")
+        part.set_payload(open("%s" % f, "rb").read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', 'attachment; filename="%s"' % basename(f))
+        msg.attach(part)
 
     smtp = smtplib.SMTP_SSL('smtp.gmail.com')
     smtp.ehlo()
     smtp.login('esa.rss.team', 'ioehroher34yc844nywrckd')
     smtp.sendmail('esa.rss.team@gmail.com', send_to, msg.as_string())
     smtp.close()
+
+

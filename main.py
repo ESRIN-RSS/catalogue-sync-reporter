@@ -9,16 +9,23 @@ from typing import List
 import argparse
 import calendar
 import requests
+import zipfile
+import uuid
 
 from send_email import send_from_gmail
 
+logger = logging.getLogger()
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 def setup_cmd_args():
     """Setup command line arguments."""
     parser = argparse.ArgumentParser(description="This small program will query G-POD and COPHUB on the same datasets, in order to obtain the number of data results, compile a table and email it.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # parser.add_argument("root_dir", help="The root directory containing data to check")
     # parser.add_argument("--workspace", help="Set Workspace manually")
-    parser.add_argument("--outputlist", help="File to write the output list with the un-synced products.")
+    parser.add_argument("--outputlist", help="Folder to write the output lists with the un-synced products.", default="c:\\temp\\")
     parser.add_argument("--daysback", help="Report with a given number of days back from today", default=0)
     parser.add_argument("--dataset", help="Set Workspace manually")
     parser.add_argument("--startdate", help=" The Start Date (format: YYYY-MM-DD) ")
@@ -54,19 +61,19 @@ def get_total_results(url, regex, max_retries=3, auth=('', '')):
 
 
 def diff_month(d1, d2):
-    from dateutil import relativedelta
-    date1 = datetime.strptime(d1, '%Y-%m-%d')
-    date2 = datetime.strptime(d2, '%Y-%m-%d')
-    r = relativedelta.relativedelta(date2, date1)
-    return r.months * (r.years + 1)
-
-
-def add_months(sourcedate,months):
-     month = sourcedate.month - 1 + months
-     year = sourcedate.year + month // 12
-     month = month % 12 + 1
-     day = min(sourcedate.day,calendar.monthrange(year,month)[1])
-     return datetime.date(year,month,day)
+    from calendar import monthrange
+    from datetime import datetime, timedelta
+    d1 = datetime.strptime(d1, '%Y-%m-%d')
+    d2 = datetime.strptime(d2, '%Y-%m-%d')
+    delta = 0
+    while True:
+        mdays = monthrange(d1.year, d1.month)[1]
+        d1 += timedelta(days=mdays)
+        if d1 <= d2:
+            delta += 1
+        else:
+            break
+    return delta
 
 
 def get_list_of_results(url, regex, max_retries=3, auth=('', '')):
@@ -98,79 +105,31 @@ def get_list_of_results(url, regex, max_retries=3, auth=('', '')):
 # $("a[id^=show_]").click(function(event) {$("#extra_" + $(this).attr('id').substr(5)).slideToggle("slow"); event.preventDefault();});
 def email_report():
     report_text = [
-        '\nCatalog results for S2A_PRD_MSIL1C\n',
+        '\nCatalog sync results (GPOD vs COPHUB)\n',
         f'{"DAY":^12}|{"G-POD Catalogue":^17}|{"COPHUB":^8}',
         '---------------------------------------'
     ]
     report_html = """\
-    <html>
-        <head><title></title>
-        <script class="jsbin" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
-        <script type="text/javascript">
-        $(document).ready(
-          function() {
-          $('td p').slideUp();
-            $('td h2').click(
-              function(){
-               $(this).closest('tr').find('p').slideToggle();
-              }
-              );
-          }
-          );
-        </script>
-    <meta charset=utf-8 />
-    <!--
-    Created using JS Bin
-    http://jsbin.com 
-    Copyright (c) 2019 by anonymous (http://jsbin.com/owede4/5/edit)
-    Released under the MIT license: http://jsbin.mit-license.org
-    -->
-    <meta name="robots" content="noindex">
-    <title>JS Bin</title>
-    <!--[if IE]>
-      <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]-->
-    <style>
-      article, aside, figure, footer, header, hgroup, 
-      menu, nav, section { display: block; }
-      body {
-        font-size: 1em;
-      }
-      
-      h2 {
-        font-size: 100%;
-        border-bottom: 1px solid #ccc;
-      }
-      
-      td {
-        border: 1px solid #ccc;
-        vertical-align: top;
-      }
-      td:first-child {
-        min-width: 200px;
-        width: 200px;
-        max-width: 200px;
-      }
-    </style>
-    </head>
-        <body>
-            <p>Catalog results for S2A_PRD_MSIL1C</p>
-            <table border="1">
-            <tr>
-                <th>REF DATE</th>
-                <th>G-POD Catalogue</th>
-                <th>COPHUB</th>
-            </tr>
-    """
+        <html>
+            <head><title></title></head>
+            <body>
+                <p>Catalog sync results (GPOD vs COPHUB)</p>
+                <table border="1">
+                <tr>
+                    <th>DATES</th>
+                    <th>G-POD Catalogue</th>
+                    <th>COPHUB</th>
+                </tr>
+        """
     return report_text, report_html
 
 
-def send_email(TO_EMAIL_LIST, report_text, report_html):
+def send_email(TO_EMAIL_LIST, report_text, report_html, attachfiles=[]):
     if TO_EMAIL_LIST:
-        # logger.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
-        send_from_gmail(TO_EMAIL_LIST, 'S2A_PRD_MSIL1C Catalogue report', '\n'.join(report_text), report_html)
-    # logger.info('\n'.join(report_text))
-    # logger.info("Done.")
+        logger.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
+        send_from_gmail(TO_EMAIL_LIST, 'S2A_PRD_MSIL1C Catalogue report', '\n'.join(report_text), report_html, attachfiles)
+    logger.info('\n'.join(report_text))
+    logger.info("Done.")
 
 
 def main():
@@ -178,13 +137,9 @@ def main():
     TO_EMAIL_LIST = ['vascobnunes@gmail.com']
     # TO_EMAIL_LIST: List[str] = []
     DAYS_BACK = 6
-    logger = logging.getLogger()
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
     username = 'ecadau'
     passw = 'gj27k?Q$'
+    lstFileNames = []
 
     if args.n:
 
@@ -244,21 +199,26 @@ def main():
         if not args.startdate==None:
             startdate = datetime.strptime(args.startdate,'%Y-%m-%d')
             enddate = datetime.strptime(args.enddate,'%Y-%m-%d').strftime('%Y-%m-%d')
-            months = diff_month(args.startdate, args.enddate)
+            months = diff_month(args.startdate, args.enddate) + 1
             startdate_dt = datetime(startdate.year, startdate.month, 1)
         else:
             today = datetime.today() - timedelta(days=int(args.daysback))
             startdate_dt = datetime(today.year, today.month, 1)
-            enddate_dt = datetime(today.year, today.month, 1) + timedelta(1*365/12)
+            d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
+            enddate_dt = datetime(today.year, today.month, 1) + timedelta(days=finalday)
         month = 1
-        while months>=0:
+        while months>0:
             if not args.startdate == None:
                 enddate_dt = datetime(startdate_dt.year, startdate_dt.month, startdate_dt.day) + timedelta(days=1*365/12)
                 d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
                 enddate_dt = datetime(startdate_dt.year, startdate_dt.month, 1) + timedelta(days=finalday)
             startdate = startdate_dt.strftime('%Y-%m-%d')
             enddate = enddate_dt.strftime('%Y-%m-%d')
-            print(startdate, enddate)
+            print(startdate,enddate)
+            cg_txtfile = os.path.join(args.outputlist,
+                                      f"unsynced_cg_files{str(startdate_dt.year)+str(startdate_dt.month)}.txt")
+            gc_txtfile = os.path.join(args.outputlist,
+                                      f"unsynced_gc_files{str(startdate_dt.year)+str(startdate_dt.month)}.txt")
             results_list_gpod=[]
             for ds in datasets:
                 url = "http://grid-eo-catalog.esrin.esa.int/catalogue/gpod/{}/files?start={}&stop={}&count=*".format(ds,startdate,enddate)
@@ -278,29 +238,37 @@ def main():
                 cophubquery = f'https://cophub.copernicus.eu/dhus/search?start={str(blimit)}&rows={str(rows)}&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND timeliness:\"Non Time Critical\")'
                 results_list_cophub, results_list_cophub_count = get_list_of_results(cophubquery, pattern_list, auth=(username, passw))
                 results_list_cophub_final = results_list_cophub_final + results_list_cophub
-            #find products that are in gpod catalog but not in cophub
-            otext_gpod_not_in_cophub = "---Products that are in gpod catalog but not in cophub---\n"
-            gpod_not_in_cophub = []
-            for n in results_list_gpod:
-                if not n[:-4] in results_list_cophub_final:
-                    otext_gpod_not_in_cophub = otext_gpod_not_in_cophub + n[:-4]+"\n"
-                    gpod_not_in_cophub.append(n[:-4])
-            # find products that are in cophub but not in gpod catalogue
-            otext_cophub_not_in_gpod = "---Products that are in cophub but not in gpod catalogue---\n"
-            cophub_not_in_gpod = []
-            for n in results_list_cophub_final:
-                if not n+".zip" in results_list_gpod:
-                    otext_cophub_not_in_gpod = otext_cophub_not_in_gpod + n+"\n"
-                    cophub_not_in_gpod.append(n)
+            with open(gc_txtfile, 'w+') as f:
+                #find products that are in gpod catalog but not in cophub
+                otext_gpod_not_in_cophub = "---Products that are in gpod catalog but not in cophub---\n"
+                gpod_not_in_cophub = []
+                for n in results_list_gpod:
+                    if not n[:-4] in results_list_cophub_final:
+                        f.write(n[:-4] + "\n")
+                        otext_gpod_not_in_cophub = otext_gpod_not_in_cophub + n[:-4]+"\n"
+                        gpod_not_in_cophub.append(n[:-4])
+
+            with open(cg_txtfile, 'w+') as f:
+                # find products that are in cophub but not in gpod catalogue
+                otext_cophub_not_in_gpod = "---Products that are in cophub but not in gpod catalogue---\n"
+                cophub_not_in_gpod = []
+                for n in results_list_cophub_final:
+                    if not n+".zip" in results_list_gpod:
+                        f.write(n + "\n")
+                        otext_cophub_not_in_gpod = otext_cophub_not_in_gpod + n+"\n"
+                        cophub_not_in_gpod.append(n)
 
             results_cophub = len(results_list_cophub_final)
             if not results_list_gpod_count == results_cophub:
                 bgcolor = "#FF3333"
             else:
                 bgcolor = "#FFFFFF"
-
+            lstFileNames.append(gc_txtfile)
+            lstFileNames.append(cg_txtfile)
+            gc_txtfile = os.path.basename(gc_txtfile)
+            cg_txtfile = os.path.basename(cg_txtfile)
             report_text.append(f'{enddate:^12}|{results_list_gpod_count:^17}|{results_cophub:^8} !')
-            report_html += f'<tr bgcolor="{bgcolor}"><td>{startdate} to {enddate}</td><td align="center"><h2>{results_list_gpod_count}</h2><p>{otext_gpod_not_in_cophub}</p></td><td align="center"><h2>{results_cophub}</h2><p>{otext_cophub_not_in_gpod}</p></td></tr>\n'
+            report_html += f'<tr bgcolor="{bgcolor}"><td>{startdate} to {enddate}</td><td align="center"><a href="{gc_txtfile}">{len(results_list_gpod)}</a></td><td align="center"><a href="{cg_txtfile}">{results_cophub}</a></td></tr>\n'
             startdate_dt = enddate_dt
             months = months - 1
             month = month + 1
@@ -309,27 +277,17 @@ def main():
         report_text.append('\n')
         report_html += """\
                 </table>
-                <script>
-                if (document.getElementById('hello')) {
-                  document.getElementById('hello').innerHTML = 'Hello World - this was inserted using JavaScript';
-                }
-                </script>
-                <script>
-                (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-                  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-                  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-                  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
-                ga('create', 'UA-1656750-34', 'auto');
-                ga('require', 'linkid', 'linkid.js');
-                ga('require', 'displayfeatures');
-                ga('send', 'pageview');
-                </script>
             </body>
         </html>
         """
-        with open("c:\\temp\\test.html", 'w') as f:
+        with open(os.path.join(args.outputlist,"sync_report.html"), 'w') as f:
             f.write(report_html)
-        # send_email(TO_EMAIL_LIST, report_text, report_html)
+        lstFileNames.append(os.path.join(args.outputlist,"sync_report.html"))
+        myzip_name = os.path.join(args.outputlist, 'reportDir' + str(uuid.uuid4()) + '.zip')
+        with zipfile.ZipFile(myzip_name, 'w') as myzip:
+            for f in lstFileNames:
+                myzip.write(f)
+        send_email(TO_EMAIL_LIST, report_text, report_html, [myzip_name])
 
 if __name__ == '__main__':
     main()
