@@ -76,7 +76,7 @@ def diff_month(d1, d2):
     return delta
 
 
-def get_list_of_results(url, regex, max_retries=3, auth=('', '')):
+def get_list_of_results(url, regex, max_retries=10, auth=('', '')):
     """Obtain the number of results found in the response message of
     a catalog query.
 
@@ -88,12 +88,18 @@ def get_list_of_results(url, regex, max_retries=3, auth=('', '')):
     """
     resultslist = []
     for _ in range(max_retries):
-        try:
-            page = requests.get(url, auth=auth)
-        except Exception:
-            logger.exception("Error getting to URL. Retrying soon.")
+        page = requests.get(url, auth=auth)
+        if not page.status_code==200:
             time.sleep(5)
             continue
+        else:
+            break
+        # try:
+        #     page = requests.get(url, auth=auth)
+        # except Exception:
+        #     logger.exception("Error getting to URL. Retrying soon.")
+        #     time.sleep(5)
+        #     continue
     if not regex is None:
         for m in re.finditer(regex, str(page.content)):
             resultslist.append(m.group(1))
@@ -103,17 +109,20 @@ def get_list_of_results(url, regex, max_retries=3, auth=('', '')):
     return resultslist, len(resultslist)
 
 # $("a[id^=show_]").click(function(event) {$("#extra_" + $(this).attr('id').substr(5)).slideToggle("slow"); event.preventDefault();});
-def email_report():
+def email_report(startdate,enddate,datasets):
     report_text = [
         '\nCatalog sync results (GPOD vs COPHUB)\n',
         f'{"DAY":^12}|{"G-POD Catalogue":^17}|{"COPHUB":^8}',
         '---------------------------------------'
     ]
-    report_html = """\
+    report_html = f"""\
         <html>
             <head><title></title></head>
             <body>
-                <p>Catalog sync results (GPOD vs COPHUB)</p>
+                <p><h2>Catalog sync results (GPOD vs COPHUB)</h2></p>
+                <p>Run executed {str(datetime.now().strftime('%Y-%m-%d %H:%M'))}, with the following parameters:</p>
+                <p>Temporal interval: {str(startdate)} to {str(enddate)}</p>
+                <p>Dataset(s): {datasets}</p>
                 <table border="1">
                 <tr>
                     <th>DATES</th>
@@ -121,13 +130,14 @@ def email_report():
                     <th>COPHUB</th>
                 </tr>
         """
+
     return report_text, report_html
 
 
 def send_email(TO_EMAIL_LIST, report_text, report_html, attachfiles=[]):
     if TO_EMAIL_LIST:
         logger.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
-        send_from_gmail(TO_EMAIL_LIST, 'S2A_PRD_MSIL1C Catalogue report', '\n'.join(report_text), report_html, attachfiles)
+        send_from_gmail(TO_EMAIL_LIST, 'Catalog sync results (GPOD vs COPHUB)', '\n'.join(report_text), report_html, attachfiles)
     logger.info('\n'.join(report_text))
     logger.info("Done.")
 
@@ -194,18 +204,19 @@ def main():
             datasets=["S3A_SR_1_SRA_A_PREOPS","S3B_SR_1_SRA_A_NTC"]
         else:
             datasets=[args.dataset]
-        report_text, report_html = email_report()
         months = 1
         if not args.startdate==None:
             startdate = datetime.strptime(args.startdate,'%Y-%m-%d')
             enddate = datetime.strptime(args.enddate,'%Y-%m-%d').strftime('%Y-%m-%d')
             months = diff_month(args.startdate, args.enddate) + 1
             startdate_dt = datetime(startdate.year, startdate.month, 1)
+            report_text, report_html = email_report(startdate.strftime('%Y-%m-%d'), enddate, datasets)
         else:
             today = datetime.today() - timedelta(days=int(args.daysback))
             startdate_dt = datetime(today.year, today.month, 1)
             d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
             enddate_dt = datetime(today.year, today.month, 1) + timedelta(days=finalday)
+            report_text, report_html = email_report(startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d'), datasets)
         month = 1
         while months>0:
             if not args.startdate == None:
@@ -238,6 +249,7 @@ def main():
                 cophubquery = f'https://cophub.copernicus.eu/dhus/search?start={str(blimit)}&rows={str(rows)}&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND timeliness:\"Non Time Critical\")'
                 results_list_cophub, results_list_cophub_count = get_list_of_results(cophubquery, pattern_list, auth=(username, passw))
                 results_list_cophub_final = results_list_cophub_final + results_list_cophub
+
             with open(gc_txtfile, 'w+') as f:
                 #find products that are in gpod catalog but not in cophub
                 otext_gpod_not_in_cophub = "---Products that are in gpod catalog but not in cophub---\n"
@@ -259,7 +271,8 @@ def main():
                         cophub_not_in_gpod.append(n)
 
             results_cophub = len(results_list_cophub_final)
-            if not results_list_gpod_count == results_cophub:
+            print(len(results_list_gpod),results_cophub)
+            if not len(results_list_gpod) == results_cophub:
                 bgcolor = "#FF3333"
             else:
                 bgcolor = "#FFFFFF"
@@ -277,6 +290,9 @@ def main():
         report_text.append('\n')
         report_html += """\
                 </table>
+                <p>Please unzip the attached file and open the html contained. The opened html should have links to montlhy txt files for the following lists:</p>
+                <p>unsynced_cg_files - are the files that were found in cophub but not in gpod</p>
+                <p>unsynced_gc_files - are the files that were found in gpod but not in cophub</p>
             </body>
         </html>
         """
