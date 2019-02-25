@@ -237,18 +237,22 @@ def main():
                 results_list_gpod = results_list_gpod + results_list_gpod_i
             pattern_list = r'<str name="identifier">(.*?)</str>'
             pattern_total = r'<opensearch:totalResults>(\d+)</opensearch:totalResults>'
-            cophubquery = f'https://cophub.copernicus.eu/dhus/search?start=0&rows=99&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND timeliness:\"Non Time Critical\")'
-            results_cophub = get_total_results(cophubquery, pattern_total, auth=(username, passw))
             results_list_cophub_final = []
-            while results_cophub>=0:
-                tlimit = results_cophub
-                blimit = results_cophub - 99
-                results_cophub = blimit
-                if blimit<0: blimit = 0
-                rows = tlimit - blimit
-                cophubquery = f'https://cophub.copernicus.eu/dhus/search?start={str(blimit)}&rows={str(rows)}&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND timeliness:\"Non Time Critical\")'
-                results_list_cophub, results_list_cophub_count = get_list_of_results(cophubquery, pattern_list, auth=(username, passw))
-                results_list_cophub_final = results_list_cophub_final + results_list_cophub
+            for ds in datasets:
+                dataset = ds.replace("S3B_SR_1_SRA_A_NTC", "S3B_*").replace("S3A_SR_1_SRA_A_PREOPS", "S3A_*")
+                cophubquery = f'https://cophub.copernicus.eu/dhus/search?start=0&rows=99&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND filename:{dataset} timeliness:\"Non Time Critical\")'
+                results_cophub = get_total_results(cophubquery, pattern_total, auth=(username, passw))
+                results_list_cophub_per_ds = []
+                while results_cophub>=0:
+                    tlimit = results_cophub
+                    blimit = results_cophub - 99
+                    results_cophub = blimit
+                    if blimit<0: blimit = 0
+                    rows = tlimit - blimit
+                    cophubquery = f'https://cophub.copernicus.eu/dhus/search?start={str(blimit)}&rows={str(rows)}&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND filename:{dataset} AND timeliness:\"Non Time Critical\")'
+                    results_list_cophub, results_list_cophub_count = get_list_of_results(cophubquery, pattern_list, auth=(username, passw))
+                    results_list_cophub_per_ds = results_list_cophub_per_ds + results_list_cophub
+                results_list_cophub_final = results_list_cophub_final + results_list_cophub_per_ds
 
             with open(gc_txtfile, 'w+') as f:
                 #find products that are in gpod catalog but not in cophub
