@@ -17,12 +17,12 @@ from send_email import send_from_gmail
 
 def setup_cmd_args():
     """Setup command line arguments."""
-    parser = argparse.ArgumentParser(description="This small program will query G-POD and COPHUB on the same datasets, in order to obtain the number of data results, compile a table and email it.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description="This program will query G-POD and COPHUB on the same datasets, in order to obtain the number of data results, compare them compile a report with the differences.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # parser.add_argument("root_dir", help="The root directory containing data to check")
     # parser.add_argument("--workspace", help="Set Workspace manually")
     parser.add_argument("--outputlist", help="Folder to write the output lists with the un-synced products.", default="c:\\temp\\")
     parser.add_argument("--daysback", help="Report with a given number of days back from today", default=0)
-    parser.add_argument("--dataset", help="Set Workspace manually")
+    parser.add_argument("--dataset", help="Set which dataset to query (chose S3A_SR_1_SRA_A_PREOPS or S3B_SR_1_SRA_A_NTC)")
     parser.add_argument("--startdate", help=" The Start Date (format: YYYY-MM-DD) ", default="2016-06-01")
     parser.add_argument("--enddate",help=" The End Date (format: YYYY-MM-DD)")
     parser.add_argument("--cphubuser",help="COPHUB username", required=True)
