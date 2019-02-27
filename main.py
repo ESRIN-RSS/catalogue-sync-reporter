@@ -23,8 +23,9 @@ def setup_cmd_args():
     parser.add_argument("--outputlist", help="Folder to write the output lists with the un-synced products.", default="c:\\temp\\")
     parser.add_argument("--daysback", help="Report with a given number of days back from today", default=0)
     parser.add_argument("--dataset", help="Set Workspace manually")
-    parser.add_argument("--startdate", help=" The Start Date (format: YYYY-MM-DD) ")
+    parser.add_argument("--startdate", help=" The Start Date (format: YYYY-MM-DD) ", default="2016-06-01")
     parser.add_argument("--enddate",help=" The End Date (format: YYYY-MM-DD)")
+    parser.add_argument('-t', action='store_true', help="Today as enddate. Otherwise the last day of the previous month is considered.")
     parser.add_argument('-n', action='store_true', help="Normal numeric check")
     parser.add_argument('-m', action='store_true', help="Monthly check with product listing.")
     return parser.parse_args()
@@ -196,7 +197,7 @@ def main():
         else:
             datasets=[args.dataset]
         months = 1
-        if not args.startdate==None:
+        if not args.enddate==None:
             startdate = datetime.strptime(args.startdate,'%Y-%m-%d')
             enddate = datetime.strptime(args.enddate,'%Y-%m-%d').strftime('%Y-%m-%d')
             months = diff_month(args.startdate, args.enddate) + 1
@@ -205,9 +206,15 @@ def main():
             logging.info("Checking dataset(s) {} from {} to {}...".format(datasets, startdate.strftime('%Y-%m-%d'), enddate))
         else:
             today = datetime.today() - timedelta(days=int(args.daysback))
-            startdate_dt = datetime(today.year, today.month, 1)
-            d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
-            enddate_dt = datetime(today.year, today.month, 1) + timedelta(days=finalday)
+            # startdate_dt = datetime(today.year, today.month, 1)
+            startdate_dt = datetime.strptime(args.startdate,'%Y-%m-%d')
+            months = diff_month(startdate_dt.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')) + 1
+            # d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
+            # enddate_dt = datetime(today.year, today.month, 1) + timedelta(days=finalday)
+            if args.t:
+                enddate_dt = today
+            else:
+                enddate_dt = datetime(today.year, today.month, 1) - timedelta(days=1)
             report_text, report_html = email_report(startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d'), datasets)
             logging.info("Checking dataset(s) {} from {} to {}...".format(datasets, startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d')))
         month = 1
@@ -317,7 +324,7 @@ def main():
                 os.chdir(os.path.dirname(f))
                 if not os.stat(f).st_size == 0: myzip.write(os.path.basename(f))
         logging.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
-        send_email(TO_EMAIL_LIST, report_text, report_html, [myzip_name])
+        # send_email(TO_EMAIL_LIST, report_text, report_html, [myzip_name])
         os.chdir(args.outputlist)
         shutil.rmtree(output_dir_name)
     logging.info("------ENDED RUN------")
