@@ -14,11 +14,6 @@ import uuid
 
 from send_email import send_from_gmail
 
-logger = logging.getLogger()
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
 
 def setup_cmd_args():
     """Setup command line arguments."""
@@ -49,14 +44,14 @@ def get_total_results(url, regex, max_retries=3, auth=('', '')):
         try:
             page = requests.get(url, auth=auth)
         except Exception:
-            logger.exception("Error getting to URL. Retrying soon.")
+            logging.exception("Error getting to URL. Retrying soon.")
             time.sleep(5)
             continue
         match = re.search(regex, str(page.content))
         if match:
             return int(match.group(1))
         else:
-            logger.error("Could not obtain totalResults. Retrying soon.")
+            logging.error("Could not obtain totalResults. Retrying soon.")
             time.sleep(5)
 
 
@@ -94,12 +89,6 @@ def get_list_of_results(url, regex, max_retries=10, auth=('', '')):
             continue
         else:
             break
-        # try:
-        #     page = requests.get(url, auth=auth)
-        # except Exception:
-        #     logger.exception("Error getting to URL. Retrying soon.")
-        #     time.sleep(5)
-        #     continue
     if not regex is None:
         for m in re.finditer(regex, str(page.content)):
             resultslist.append(m.group(1))
@@ -136,10 +125,7 @@ def email_report(startdate,enddate,datasets):
 
 def send_email(TO_EMAIL_LIST, report_text, report_html, attachfiles=[]):
     if TO_EMAIL_LIST:
-        logger.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
         send_from_gmail(TO_EMAIL_LIST, 'Catalog sync results (GPOD vs COPHUB)', '\n'.join(report_text), report_html, attachfiles)
-    logger.info('\n'.join(report_text))
-    logger.info("Done.")
 
 
 def main():
@@ -150,6 +136,9 @@ def main():
     username = 'ecadau'
     passw = 'gj27k?Q$'
     lstFileNames = []
+    logging.basicConfig(filename=os.path.join(args.outputlist, 'gpod_cophub_sync_check.log'), level=logging.INFO,
+                        format='INFO: %(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+    logging.info("------STARTED RUN------")
 
     if args.n:
 
@@ -173,11 +162,11 @@ def main():
 
         for num_day in reversed(range(DAYS_BACK)):
             cur_day_str = (datetime.today() - timedelta(days=num_day)).strftime('%Y-%m-%d')
-            logger.info(f'Querying G-POD {cur_day_str}')
+            logging.info(f'Querying G-POD {cur_day_str}')
             results_gpod = get_total_results(
                 f'http://grid-eo-catalog.esrin.esa.int/catalogue/gpod/S2A_PRD_MSIL1C/rdf/?count=1&start={cur_day_str}&stop={cur_day_str}',
                 r'<os:totalResults>(\d+)</os:totalResults>')
-            logger.info(f'Querying COPHUB {cur_day_str}')
+            logging.info(f'Querying COPHUB {cur_day_str}')
             results_cophub = get_total_results(
                 f'https://cophub.copernicus.eu/dhus/search?start=0&rows=1&q=(%20beginposition:[{cur_day_str}T00:00:00.000Z%20TO%20{cur_day_str}T23:59:59.999Z]%20AND%20endposition:[{cur_day_str}T00:00:00.000Z%20TO%20{cur_day_str}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-2%20AND%20producttype:S2MSI1C)',
                 r'<opensearch:totalResults>(\d+)</opensearch:totalResults>', auth=(username, passw))
@@ -200,6 +189,8 @@ def main():
         send_email(TO_EMAIL_LIST, report_text, report_html)
 
     if args.m:
+        output_dir_name = os.path.join(args.outputlist, 'reportDir' + str(uuid.uuid4()))
+        os.mkdir(output_dir_name)
         if args.dataset==None:
             datasets=["S3A_SR_1_SRA_A_PREOPS","S3B_SR_1_SRA_A_NTC"]
         else:
@@ -211,12 +202,14 @@ def main():
             months = diff_month(args.startdate, args.enddate) + 1
             startdate_dt = datetime(startdate.year, startdate.month, 1)
             report_text, report_html = email_report(startdate.strftime('%Y-%m-%d'), enddate, datasets)
+            logging.info("Checking dataset(s) {} from {} to {}...".format(datasets, startdate.strftime('%Y-%m-%d'), enddate))
         else:
             today = datetime.today() - timedelta(days=int(args.daysback))
             startdate_dt = datetime(today.year, today.month, 1)
             d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
             enddate_dt = datetime(today.year, today.month, 1) + timedelta(days=finalday)
             report_text, report_html = email_report(startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d'), datasets)
+            logging.info("Checking dataset(s) {} from {} to {}...".format(datasets, startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d')))
         month = 1
         while months>0:
             if not args.startdate == None:
@@ -226,22 +219,29 @@ def main():
             startdate = startdate_dt.strftime('%Y-%m-%d')
             enddate = enddate_dt.strftime('%Y-%m-%d')
             print(startdate,enddate)
-            cg_txtfile = os.path.join(args.outputlist,
+            cg_txtfile = os.path.join(output_dir_name,
                                       f"unsynced_cg_files{str(startdate_dt.year)+str(startdate_dt.month)}.txt")
-            gc_txtfile = os.path.join(args.outputlist,
+            gc_txtfile = os.path.join(output_dir_name,
                                       f"unsynced_gc_files{str(startdate_dt.year)+str(startdate_dt.month)}.txt")
             results_list_gpod=[]
             for ds in datasets:
                 url = "http://grid-eo-catalog.esrin.esa.int/catalogue/gpod/{}/files?start={}&stop={}&count=*".format(ds,startdate,enddate)
-                results_list_gpod_i, results_list_gpod_count = get_list_of_results(url,None)
+                try:
+                    results_list_gpod_i, results_list_gpod_count = get_list_of_results(url,None)
+                except:
+                    logging.info(f"Some problem occurred when connecting to GPOD!")
                 results_list_gpod = results_list_gpod + results_list_gpod_i
+
             pattern_list = r'<str name="identifier">(.*?)</str>'
             pattern_total = r'<opensearch:totalResults>(\d+)</opensearch:totalResults>'
             results_list_cophub_final = []
             for ds in datasets:
                 dataset = ds.replace("S3B_SR_1_SRA_A_NTC", "S3B_*").replace("S3A_SR_1_SRA_A_PREOPS", "S3A_*")
                 cophubquery = f'https://cophub.copernicus.eu/dhus/search?start=0&rows=99&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND filename:{dataset} timeliness:\"Non Time Critical\")'
-                results_cophub = get_total_results(cophubquery, pattern_total, auth=(username, passw))
+                try:
+                    results_cophub = get_total_results(cophubquery, pattern_total, auth=(username, passw))
+                except:
+                    logging.info(f"Some problem occurred when connecting to COPHUB!")
                 results_list_cophub_per_ds = []
                 while results_cophub>=0:
                     tlimit = results_cophub
@@ -250,10 +250,12 @@ def main():
                     if blimit<0: blimit = 0
                     rows = tlimit - blimit
                     cophubquery = f'https://cophub.copernicus.eu/dhus/search?start={str(blimit)}&rows={str(rows)}&q=(%20beginposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20AND%20endposition:[{startdate}T00:00:00.000Z%20TO%20{enddate}T23:59:59.999Z]%20)%20AND%20(platformname:Sentinel-3 AND producttype:SR_1_SRA_A_ AND filename:{dataset} AND timeliness:\"Non Time Critical\")'
-                    results_list_cophub, results_list_cophub_count = get_list_of_results(cophubquery, pattern_list, auth=(username, passw))
+                    try:
+                        results_list_cophub, results_list_cophub_count = get_list_of_results(cophubquery, pattern_list, auth=(username, passw))
+                    except:
+                        logging.info(f"Some problem occurred when connecting to COPHUB!")
                     results_list_cophub_per_ds = results_list_cophub_per_ds + results_list_cophub
                 results_list_cophub_final = results_list_cophub_final + results_list_cophub_per_ds
-
             with open(gc_txtfile, 'w+') as f:
                 #find products that are in gpod catalog but not in cophub
                 otext_gpod_not_in_cophub = "---Products that are in gpod catalog but not in cophub---\n"
@@ -300,14 +302,17 @@ def main():
             </body>
         </html>
         """
-        with open(os.path.join(args.outputlist,"sync_report.html"), 'w') as f:
+        with open(os.path.join(output_dir_name,"sync_report.html"), 'w') as f:
             f.write(report_html)
-        lstFileNames.append(os.path.join(args.outputlist,"sync_report.html"))
-        myzip_name = os.path.join(args.outputlist, 'reportDir' + str(uuid.uuid4()) + '.zip')
+        lstFileNames.append(os.path.join(output_dir_name,"sync_report.html"))
+        myzip_name = output_dir_name + '.zip'
         with zipfile.ZipFile(myzip_name, 'w') as myzip:
             for f in lstFileNames:
-                myzip.write(f)
+                os.chdir(os.path.dirname(f))
+                myzip.write(os.path.basename(f))
+        logging.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
         send_email(TO_EMAIL_LIST, report_text, report_html, [myzip_name])
+    logging.info("------ENDED RUN------")
 
 if __name__ == '__main__':
     main()
