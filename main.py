@@ -25,6 +25,9 @@ def setup_cmd_args():
     parser.add_argument("--dataset", help="Set Workspace manually")
     parser.add_argument("--startdate", help=" The Start Date (format: YYYY-MM-DD) ", default="2016-06-01")
     parser.add_argument("--enddate",help=" The End Date (format: YYYY-MM-DD)")
+    parser.add_argument("--cphubuser",help="COPHUB username")
+    parser.add_argument("--cphubpw",help="COPHUB password")
+    parser.add_argument("-email", type=str, help="Email to send the results", action="append")
     parser.add_argument('-t', action='store_true', help="Today as enddate. Otherwise the last day of the previous month is considered.")
     parser.add_argument('-n', action='store_true', help="Normal numeric check")
     parser.add_argument('-m', action='store_true', help="Monthly check with product listing.")
@@ -131,11 +134,9 @@ def send_email(TO_EMAIL_LIST, report_text, report_html, attachfiles=[]):
 
 def main():
     args = setup_cmd_args()
-    TO_EMAIL_LIST = ['vascobnunes@gmail.com']
-    # TO_EMAIL_LIST: List[str] = []
     DAYS_BACK = 6
-    username = 'ecadau'
-    passw = 'gj27k?Q$'
+    username = args.cphubuser
+    passw = args.cphubpw
     lstFileNames = []
     logging.basicConfig(filename=os.path.join(args.outputlist, 'gpod_cophub_sync_check.log'), level=logging.INFO,
                         format='INFO: %(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -187,7 +188,7 @@ def main():
         </html>
         """
 
-        send_email(TO_EMAIL_LIST, report_text, report_html)
+        send_email(list(args.email), report_text, report_html)
 
     if args.m:
         output_dir_name = os.path.join(args.outputlist, 'reportDir' + str(uuid.uuid4()))
@@ -208,7 +209,7 @@ def main():
             today = datetime.today() - timedelta(days=int(args.daysback))
             # startdate_dt = datetime(today.year, today.month, 1)
             startdate_dt = datetime.strptime(args.startdate,'%Y-%m-%d')
-            months = diff_month(startdate_dt.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')) + 1
+            months = diff_month(startdate_dt.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
             # d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
             # enddate_dt = datetime(today.year, today.month, 1) + timedelta(days=finalday)
             if args.t:
@@ -217,12 +218,13 @@ def main():
                 enddate_dt = datetime(today.year, today.month, 1) - timedelta(days=1)
             report_text, report_html = email_report(startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d'), datasets)
             logging.info("Checking dataset(s) {} from {} to {}...".format(datasets, startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d')))
+            print(startdate_dt.strftime('%Y-%m-%d'), enddate_dt.strftime('%Y-%m-%d'))
         month = 1
         while months>0:
-            if not args.startdate == None:
-                enddate_dt = datetime(startdate_dt.year, startdate_dt.month, startdate_dt.day) + timedelta(days=1*365/12)
-                d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
-                enddate_dt = datetime(startdate_dt.year, startdate_dt.month, 1) + timedelta(days=finalday)
+            # if not args.enddate == None:
+                # enddate_dt = datetime(startdate_dt.year, startdate_dt.month, startdate_dt.day) + timedelta(days=1*365/12)
+            d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
+            enddate_dt = datetime(startdate_dt.year, startdate_dt.month, 1) + timedelta(days=finalday)
             startdate = startdate_dt.strftime('%Y-%m-%d')
             enddate = enddate_dt.strftime('%Y-%m-%d')
             print(startdate,enddate)
@@ -323,8 +325,8 @@ def main():
             for f in lstFileNames:
                 os.chdir(os.path.dirname(f))
                 if not os.stat(f).st_size == 0: myzip.write(os.path.basename(f))
-        logging.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
-        # send_email(TO_EMAIL_LIST, report_text, report_html, [myzip_name])
+        logging.info(f"Sending email to {', '.join(list(args.email))}")
+        send_email(list(args.email), report_text, report_html, [myzip_name])
         os.chdir(args.outputlist)
         shutil.rmtree(output_dir_name)
     logging.info("------ENDED RUN------")
