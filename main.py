@@ -5,7 +5,7 @@ import logging
 import re, os
 import time
 from datetime import datetime, timedelta
-from typing import List
+import shutil
 import argparse
 import calendar
 import requests
@@ -284,10 +284,16 @@ def main():
                 bgcolor = "#FFFFFF"
             lstFileNames.append(gc_txtfile)
             lstFileNames.append(cg_txtfile)
-            gc_txtfile = os.path.basename(gc_txtfile)
-            cg_txtfile = os.path.basename(cg_txtfile)
             report_text.append(f'{enddate:^12}|{results_list_gpod_count:^17}|{results_cophub:^8} !')
-            report_html += f'<tr bgcolor="{bgcolor}"><td>{startdate} to {enddate}</td><td align="center"><a href="{gc_txtfile}">{len(results_list_gpod)}</a></td><td align="center"><a href="{cg_txtfile}">{results_cophub}</a></td></tr>\n'
+            if not os.stat(gc_txtfile).st_size == 0:
+                gc_link =  f"<a href=\"{os.path.basename(gc_txtfile)}\">{len(results_list_gpod)}</a>"
+            else:
+                gc_link = f"{len(results_list_gpod)}"
+            if not os.stat(cg_txtfile).st_size == 0:
+                cg_link = f"<a href=\"{os.path.basename(cg_txtfile)}\">{results_cophub}</a>"
+            else:
+                cg_link = f"{results_cophub}"
+            report_html += f'<tr bgcolor="{bgcolor}"><td>{startdate} to {enddate}</td><td align="center">{gc_link}</td><td align="center">{cg_link}</td></tr>\n'
             startdate_dt = enddate_dt
             months = months - 1
             month = month + 1
@@ -309,9 +315,11 @@ def main():
         with zipfile.ZipFile(myzip_name, 'w') as myzip:
             for f in lstFileNames:
                 os.chdir(os.path.dirname(f))
-                myzip.write(os.path.basename(f))
+                if not os.stat(f).st_size == 0: myzip.write(os.path.basename(f))
         logging.info(f"Sending email to {', '.join(TO_EMAIL_LIST)}")
         send_email(TO_EMAIL_LIST, report_text, report_html, [myzip_name])
+        os.chdir(args.outputlist)
+        shutil.rmtree(output_dir_name)
     logging.info("------ENDED RUN------")
 
 if __name__ == '__main__':
