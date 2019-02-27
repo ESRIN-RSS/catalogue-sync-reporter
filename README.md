@@ -36,3 +36,7 @@ Options:
 `  -n                    Normal numeric check (default: False)`
 
 `  -m                    Monthly check with product listing. (default: False)`
+
+Example:
+
+`python main.py -m --cphubuser <cophubusername> --cphubpw <cophubpassword> --outputlist /root/gpod_cophub_sync_reports/ --dataset S3A_SR_1_SRA_A_PREOPS -email foo@mail.com` 
