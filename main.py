@@ -287,7 +287,8 @@ def main():
 
             results_cophub = len(results_list_cophub_final)
             print(len(results_list_gpod),results_cophub)
-            if not len(results_list_gpod) == results_cophub:
+            perc_diff = abs((len(results_list_gpod)-results_cophub+1)/(len(results_list_gpod)+1)*100)
+            if perc_diff > 5 and len(results_list_gpod) != results_cophub:
                 bgcolor = "#FF3333"
             else:
                 bgcolor = "#FFFFFF"
