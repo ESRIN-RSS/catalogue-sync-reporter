@@ -224,14 +224,14 @@ def main():
             # if not args.enddate == None:
                 # enddate_dt = datetime(startdate_dt.year, startdate_dt.month, startdate_dt.day) + timedelta(days=1*365/12)
             d, finalday = calendar.monthrange(startdate_dt.year, startdate_dt.month)
-            enddate_dt = datetime(startdate_dt.year, startdate_dt.month, 1) + timedelta(days=finalday)
+            enddate_dt = datetime(startdate_dt.year, startdate_dt.month, finalday) #+ timedelta(days=finalday)
             startdate = startdate_dt.strftime('%Y-%m-%d')
             enddate = enddate_dt.strftime('%Y-%m-%d')
             print(startdate,enddate)
             cg_txtfile = os.path.join(output_dir_name,
-                                      f"unsynced_cg_files{str(startdate_dt.year)+str(startdate_dt.month)}.txt")
+                                      f"unsynced_cg_files{str(startdate_dt.year)+str(startdate_dt.strftime('%m'))}.txt")
             gc_txtfile = os.path.join(output_dir_name,
-                                      f"unsynced_gc_files{str(startdate_dt.year)+str(startdate_dt.month)}.txt")
+                                      f"unsynced_gc_files{str(startdate_dt.year)+str(startdate_dt.strftime('%m'))}.txt")
             results_list_gpod=[]
             for ds in datasets:
                 url = "http://grid-eo-catalog.esrin.esa.int/catalogue/gpod/{}/files?start={}&stop={}&count=*".format(ds,startdate,enddate)
@@ -304,7 +304,7 @@ def main():
             else:
                 cg_link = f"{results_cophub}"
             report_html += f'<tr bgcolor="{bgcolor}"><td>{startdate} to {enddate}</td><td align="center">{gc_link}</td><td align="center">{cg_link}</td></tr>\n'
-            startdate_dt = enddate_dt
+            startdate_dt = enddate_dt + timedelta(days=1)
             months = months - 1
             month = month + 1
 
